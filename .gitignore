@@ -1,3 +1,6 @@
+# Temporary test files — may contain presigned URLs, never commit
+*.tmp
+
 # Dependencies
 node_modules/
 .pnp
