@@ -1,0 +1,335 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  CloudVault — Near-Zero-Cost Serverless Cloud File Vault
+  Private S3 bucket + Lambda + API Gateway HTTP API (no EC2, RDS, NAT, DynamoDB)
+
+# CAPABILITY_NAMED_IAM is required because this template creates a named IAM role.
+# Deploy with: sam deploy --capabilities CAPABILITY_NAMED_IAM
+# Or use the samconfig.toml in this directory which sets it automatically.
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Storage Guardrails"
+        Parameters: [MaxFileSizeMB, MaxObjectCount, MaxStorageMB, DemoRetentionDays]
+      - Label:
+          default: "API & Security"
+        Parameters: [AllowedOrigin, PresignedUrlExpirySeconds]
+      - Label:
+          default: "Observability"
+        Parameters: [LogRetentionDays]
+
+# ─────────────────────────────────────────────
+# Parameters
+# ─────────────────────────────────────────────
+Parameters:
+  ProjectName:
+    Type: String
+    Default: cloudvault
+    Description: Short project name used in resource naming
+
+  AllowedOrigin:
+    Type: String
+    Default: http://localhost:5173
+    Description: >
+      Frontend origin for CORS. Use http://localhost:5173 for local dev.
+      Set to your deployed frontend URL in production (e.g. https://yoursite.com).
+
+  MaxFileSizeMB:
+    Type: Number
+    Default: 25
+    Description: Maximum allowed file size in megabytes
+
+  MaxObjectCount:
+    Type: Number
+    Default: 100
+    Description: Maximum number of objects allowed in the uploads prefix
+
+  MaxStorageMB:
+    Type: Number
+    Default: 250
+    Description: Maximum total storage in megabytes for the uploads prefix
+
+  PresignedUrlExpirySeconds:
+    Type: Number
+    Default: 300
+    Description: Presigned URL lifetime in seconds (5 minutes)
+
+  LogRetentionDays:
+    Type: Number
+    Default: 7
+    Description: CloudWatch log retention in days (keep short to minimise cost)
+
+  DemoRetentionDays:
+    Type: Number
+    Default: 30
+    MinValue: 7
+    MaxValue: 90
+    Description: >
+      Optional S3 lifecycle expiration for demo objects (7–90 days).
+      Set to 0 to disable automatic expiration.
+
+# ─────────────────────────────────────────────
+# Globals — apply to all Lambda functions
+# ─────────────────────────────────────────────
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Architectures:
+      - arm64               # Graviton2 — cheaper & faster for simple I/O handlers
+    MemorySize: 256          # Enough for presigned-URL generation; no file bytes handled
+    Timeout: 15
+    Environment:
+      Variables:
+        BUCKET_NAME: !Ref CloudVaultBucket
+        MAX_FILE_SIZE_MB: !Ref MaxFileSizeMB
+        MAX_OBJECT_COUNT: !Ref MaxObjectCount
+        MAX_STORAGE_MB: !Ref MaxStorageMB
+        PRESIGNED_URL_EXPIRY: !Ref PresignedUrlExpirySeconds
+        UPLOADS_PREFIX: "uploads/"
+        NODE_OPTIONS: "--enable-source-maps"
+    # No provisioned concurrency — pay-per-use only
+
+# ─────────────────────────────────────────────
+# Resources
+# ─────────────────────────────────────────────
+Resources:
+
+  # ── S3 Bucket ─────────────────────────────
+  CloudVaultBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${ProjectName}-${AWS::AccountId}-${AWS::Region}"
+      # Block all public access — mandatory
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      # Default encryption at rest
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      # No versioning for V1 — versioning multiplies stored objects and cost
+      VersioningConfiguration:
+        Status: Suspended
+      # No cross-region replication
+      LifecycleConfiguration:
+        Rules:
+          # Abort incomplete multipart uploads after 1 day
+          - Id: AbortIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+          # Optional: expire demo objects after DemoRetentionDays
+          - Id: DemoObjectExpiration
+            Status: Enabled
+            Prefix: "uploads/"
+            ExpirationInDays: !Ref DemoRetentionDays
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - GET
+              - PUT
+              - HEAD
+            AllowedOrigins:
+              - !Ref AllowedOrigin
+            ExposedHeaders:
+              - ETag
+            MaxAge: 3000
+
+  # ── IAM Role for Lambda ────────────────────
+  CloudVaultLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        # Basic execution — writes logs to CloudWatch
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: CloudVaultS3LeastPrivilege
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # ListBucket on the bucket itself (not objects)
+              - Sid: AllowListBucket
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt CloudVaultBucket.Arn
+                Condition:
+                  StringLike:
+                    s3:prefix:
+                      - "uploads/*"
+                      - "uploads/"
+              # Object-level operations scoped to uploads/ prefix only
+              - Sid: AllowObjectOperations
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub "${CloudVaultBucket.Arn}/uploads/*"
+
+  # ── API Gateway HTTP API ───────────────────
+  CloudVaultApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: v1
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref AllowedOrigin
+        AllowMethods:
+          - GET
+          - POST
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Requested-With
+        MaxAge: 600
+
+  # ── Lambda Functions ───────────────────────
+  # CodeUri points to ../backend/ (not just handlers/) so that the root
+  # package.json with "type":"module" is included in the Lambda package,
+  # enabling ES module import/export syntax in all handlers.
+
+  HealthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-health"
+      CodeUri: ../backend/
+      Handler: src/handlers/health.handler
+      Role: !GetAtt CloudVaultLambdaRole.Arn
+      Events:
+        HealthApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref CloudVaultApi
+            Path: /health
+            Method: GET
+
+  ListFilesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-list-files"
+      CodeUri: ../backend/
+      Handler: src/handlers/listFiles.handler
+      Role: !GetAtt CloudVaultLambdaRole.Arn
+      Events:
+        ListFilesApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref CloudVaultApi
+            Path: /files
+            Method: GET
+
+  CreateUploadUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-create-upload-url"
+      CodeUri: ../backend/
+      Handler: src/handlers/createUploadUrl.handler
+      Role: !GetAtt CloudVaultLambdaRole.Arn
+      Events:
+        CreateUploadUrlApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref CloudVaultApi
+            Path: /upload-url
+            Method: POST
+
+  CreateDownloadUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-create-download-url"
+      CodeUri: ../backend/
+      Handler: src/handlers/createDownloadUrl.handler
+      Role: !GetAtt CloudVaultLambdaRole.Arn
+      Events:
+        CreateDownloadUrlApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref CloudVaultApi
+            Path: /download-url
+            Method: GET
+
+  DeleteFileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-delete-file"
+      CodeUri: ../backend/
+      Handler: src/handlers/deleteFile.handler
+      Role: !GetAtt CloudVaultLambdaRole.Arn
+      Events:
+        DeleteFileApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref CloudVaultApi
+            Path: /files/{key+}
+            Method: DELETE
+
+  # ── CloudWatch Log Groups (explicit retention) ──
+  HealthFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-health"
+      RetentionInDays: !Ref LogRetentionDays
+
+  ListFilesFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-list-files"
+      RetentionInDays: !Ref LogRetentionDays
+
+  CreateUploadUrlFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-create-upload-url"
+      RetentionInDays: !Ref LogRetentionDays
+
+  CreateDownloadUrlFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-create-download-url"
+      RetentionInDays: !Ref LogRetentionDays
+
+  DeleteFileFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-delete-file"
+      RetentionInDays: !Ref LogRetentionDays
+
+# ─────────────────────────────────────────────
+# Outputs
+# ─────────────────────────────────────────────
+Outputs:
+  ApiBaseUrl:
+    Description: "API Gateway HTTP API base URL — set as VITE_API_URL in frontend/.env"
+    Value: !Sub "https://${CloudVaultApi}.execute-api.${AWS::Region}.amazonaws.com/v1"
+
+  BucketName:
+    Description: "S3 bucket name"
+    Value: !Ref CloudVaultBucket
+
+  BucketArn:
+    Description: "S3 bucket ARN"
+    Value: !GetAtt CloudVaultBucket.Arn
+
+  LambdaRoleArn:
+    Description: "Lambda execution role ARN"
+    Value: !GetAtt CloudVaultLambdaRole.Arn

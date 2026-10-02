@@ -1,0 +1,20 @@
+{
+  "name": "cloudvault-backend",
+  "version": "1.0.0",
+  "description": "CloudVault Lambda handlers — serverless control plane",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "lint": "eslint src/**/*.js",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@aws-sdk/s3-request-presigner": "^3.600.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0"
+  }
+}
