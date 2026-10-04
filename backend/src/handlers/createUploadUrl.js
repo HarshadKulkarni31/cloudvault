@@ -1,7 +1,8 @@
 /**
  * createUploadUrl.js — POST /upload-url
  *
- * Validates the upload request, checks quotas, and returns a presigned PUT URL.
+ * Validates the upload request, checks per-user quotas, and returns a
+ * presigned PUT URL scoped to the authenticated user's S3 prefix.
  * The browser uploads the file DIRECTLY to S3 — Lambda never receives the file bytes.
  *
  * Request body: { fileName, contentType, fileSize }
@@ -12,11 +13,23 @@ import { randomUUID } from 'crypto';
 import { validateUploadRequest, sanitizeFileName } from '../utils/validation.js';
 import { checkQuota, generatePresignedPutUrl } from '../services/s3Service.js';
 import { successResponse, errorResponse, internalError } from '../utils/response.js';
+import { getUserId, getUserPrefix } from '../utils/auth.js';
 import { config } from '../utils/config.js';
 
 export const handler = async (event) => {
   const requestId = event.requestContext?.requestId ?? 'unknown';
-  console.log(`[createUploadUrl] POST /upload-url requestId=${requestId}`);
+
+  // ── Extract authenticated user identity ──────────────────
+  let userId;
+  try {
+    userId = getUserId(event);
+  } catch (err) {
+    console.error(`[createUploadUrl] auth error requestId=${requestId}`, err.message);
+    return internalError('auth claim extraction failed');
+  }
+
+  const userPrefix = getUserPrefix(userId, config.uploadsPrefix);
+  console.log(`[createUploadUrl] POST /upload-url userId=${userId} requestId=${requestId}`);
 
   // ── Parse body ──────────────────────────────────────────
   let body;
@@ -31,26 +44,28 @@ export const handler = async (event) => {
   // ── Validate (Lambda re-validates — never trust client alone) ──
   const validation = validateUploadRequest({ fileName, contentType, fileSize });
   if (!validation.valid) {
-    console.log(`[createUploadUrl] validation failed code=${validation.code} requestId=${requestId}`);
+    console.log(`[createUploadUrl] validation failed code=${validation.code} userId=${userId} requestId=${requestId}`);
     return errorResponse(validation.code, validation.message);
   }
 
-  // ── Quota check ─────────────────────────────────────────
+  // ── Per-user quota check ─────────────────────────────────
   let quotaResult;
   try {
-    quotaResult = await checkQuota(fileSize);
+    quotaResult = await checkQuota(userPrefix, fileSize);
   } catch (err) {
     return internalError(`quota check failed: ${err.message}`);
   }
 
   if (!quotaResult.allowed) {
-    console.log(`[createUploadUrl] quota exceeded code=${quotaResult.code} requestId=${requestId}`);
+    console.log(`[createUploadUrl] quota exceeded code=${quotaResult.code} userId=${userId} requestId=${requestId}`);
     return errorResponse(quotaResult.code, quotaResult.reason, 429);
   }
 
-  // ── Generate safe S3 key ─────────────────────────────────
+  // ── Generate safe S3 key under the user's prefix ─────────
   const sanitized = sanitizeFileName(fileName);
-  const key = `${config.uploadsPrefix}${randomUUID()}-${sanitized}`;
+  // Key format: uploads/{userId}/{uuid}-{sanitized-name}
+  // The UUID is always 36 chars, so slice(37) reliably recovers the display name.
+  const key = `${userPrefix}${randomUUID()}-${sanitized}`;
 
   // ── Generate presigned PUT URL ───────────────────────────
   let uploadUrl;
@@ -62,7 +77,7 @@ export const handler = async (event) => {
 
   console.log(
     `[createUploadUrl] success key=${key} size=${fileSize} type=${contentType} ` +
-    `objects=${quotaResult.objectCount} requestId=${requestId}`
+    `objects=${quotaResult.objectCount} userId=${userId} requestId=${requestId}`
     // NOTE: never log the presigned URL itself
   );
 

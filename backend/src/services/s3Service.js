@@ -6,6 +6,9 @@
  *
  * SECURITY: No credentials are stored here.
  * Lambda identity is assumed from the IAM execution role automatically.
+ *
+ * All list/quota/presign operations now accept a `prefix` parameter so that
+ * each user's files are scoped to uploads/{userId}/ — enforcing per-user isolation.
  */
 
 import {
@@ -26,19 +29,20 @@ const s3 = new S3Client({ region: config.region });
 // ─────────────────────────────────────────────────────────
 
 /**
- * List all objects under the uploads/ prefix.
+ * List all objects under the given prefix (scoped to a specific user).
  * Returns an array of file metadata objects.
  *
- * @returns {Promise<Array<{key, name, size, contentType, lastModified}>>}
+ * @param {string} prefix - Per-user prefix, e.g. "uploads/{userId}/"
+ * @returns {Promise<Array<{key, name, size, lastModified, etag}>>}
  */
-export async function listFiles() {
+export async function listFiles(prefix) {
   const results = [];
   let continuationToken;
 
   do {
     const command = new ListObjectsV2Command({
       Bucket: config.bucketName,
-      Prefix: config.uploadsPrefix,
+      Prefix: prefix,
       MaxKeys: 1000,         // cap to avoid runaway pagination
       ContinuationToken: continuationToken,
     });
@@ -46,14 +50,13 @@ export async function listFiles() {
     const response = await s3.send(command);
 
     for (const obj of response.Contents ?? []) {
-      if (obj.Key === config.uploadsPrefix) continue; // skip folder placeholder
+      if (obj.Key === prefix) continue; // skip folder placeholder
 
-      // Extract original filename from key: uploads/<uuid>-<sanitized-name>
-      const keyWithoutPrefix = obj.Key.replace(config.uploadsPrefix, '');
-      // UUID is 36 chars + '-', so original name starts after that
-      const dashIndex = keyWithoutPrefix.indexOf('-');
-      const displayName = dashIndex !== -1
-        ? keyWithoutPrefix.slice(dashIndex + 1)
+      // Extract original filename from key: {prefix}{uuid}-{sanitized-name}
+      const keyWithoutPrefix = obj.Key.slice(prefix.length);
+      // UUID is 36 chars (8-4-4-4-12), so original name starts at index 37 (uuid + '-')
+      const displayName = keyWithoutPrefix.length > 37
+        ? keyWithoutPrefix.slice(37)
         : keyWithoutPrefix;
 
       results.push({
@@ -66,7 +69,7 @@ export async function listFiles() {
     }
 
     continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
-  } while (continuationToken);
+  } while (continuationToken);;
 
   return results;
 }
@@ -76,14 +79,15 @@ export async function listFiles() {
 // ─────────────────────────────────────────────────────────
 
 /**
- * Check current usage against configured quotas.
+ * Check current usage against configured quotas for a specific user.
  * Called before issuing a presigned upload URL.
  *
+ * @param {string} prefix - Per-user prefix, e.g. "uploads/{userId}/"
  * @param {number} incomingFileSize - Size of the file about to be uploaded
  * @returns {Promise<{ allowed: boolean, reason?: string, code?: string, objectCount: number, totalBytes: number }>}
  */
-export async function checkQuota(incomingFileSize) {
-  const files = await listFiles();
+export async function checkQuota(prefix, incomingFileSize) {
+  const files = await listFiles(prefix);
   const objectCount = files.length;
   const totalBytes = files.reduce((sum, f) => sum + (f.size || 0), 0);
 
@@ -119,7 +123,7 @@ export async function checkQuota(incomingFileSize) {
  * Generate a presigned PUT URL for a direct browser-to-S3 upload.
  * Lambda never handles the file bytes — only this URL is returned.
  *
- * @param {string} key         - S3 object key (must start with uploads/)
+ * @param {string} key         - S3 object key (must start with uploads/{userId}/)
  * @param {string} contentType - Content-Type header the browser will send
  * @returns {Promise<string>} Presigned URL
  */
@@ -137,7 +141,7 @@ export async function generatePresignedPutUrl(key, contentType) {
 /**
  * Generate a presigned GET URL for a direct S3-to-browser download.
  *
- * @param {string} key - S3 object key (must start with uploads/)
+ * @param {string} key - S3 object key (must start with uploads/{userId}/)
  * @returns {Promise<string>} Presigned URL
  */
 export async function generatePresignedGetUrl(key) {

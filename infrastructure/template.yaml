@@ -2,7 +2,8 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
   CloudVault — Near-Zero-Cost Serverless Cloud File Vault
-  Private S3 bucket + Lambda + API Gateway HTTP API (no EC2, RDS, NAT, DynamoDB)
+  Private S3 bucket + Lambda + API Gateway HTTP API + Cognito Google Auth
+  (no EC2, RDS, NAT, DynamoDB)
 
 # CAPABILITY_NAMED_IAM is required because this template creates a named IAM role.
 # Deploy with: sam deploy --capabilities CAPABILITY_NAMED_IAM
@@ -16,6 +17,9 @@ Metadata:
       - Label:
           default: "API & Security"
         Parameters: [AllowedOrigin, PresignedUrlExpirySeconds]
+      - Label:
+          default: "Authentication"
+        Parameters: [GoogleClientId, GoogleClientSecret, CognitoDomainPrefix]
       - Label:
           default: "Observability"
         Parameters: [LogRetentionDays]
@@ -44,12 +48,12 @@ Parameters:
   MaxObjectCount:
     Type: Number
     Default: 100
-    Description: Maximum number of objects allowed in the uploads prefix
+    Description: Maximum number of objects allowed per user in the uploads prefix
 
   MaxStorageMB:
     Type: Number
     Default: 250
-    Description: Maximum total storage in megabytes for the uploads prefix
+    Description: Maximum total storage in megabytes per user
 
   PresignedUrlExpirySeconds:
     Type: Number
@@ -64,11 +68,34 @@ Parameters:
   DemoRetentionDays:
     Type: Number
     Default: 30
-    MinValue: 7
+    MinValue: 0
     MaxValue: 90
     Description: >
-      Optional S3 lifecycle expiration for demo objects (7–90 days).
+      Optional S3 lifecycle expiration for objects (0–90 days).
       Set to 0 to disable automatic expiration.
+
+  # ── Authentication Parameters ──────────────────────────
+  GoogleClientId:
+    Type: String
+    Description: >
+      Google OAuth 2.0 Client ID from Google Cloud Console.
+      Required for Google Sign-In via Cognito.
+    NoEcho: false
+
+  GoogleClientSecret:
+    Type: String
+    Description: >
+      Google OAuth 2.0 Client Secret from Google Cloud Console.
+      Stored securely in Cognito — never exposed to the frontend.
+    NoEcho: true
+
+  CognitoDomainPrefix:
+    Type: String
+    Default: cloudvault-auth
+    Description: >
+      Globally unique prefix for the Cognito Hosted UI domain.
+      Your Hosted UI will be at: https://<prefix>.auth.<region>.amazoncognito.com
+      Must be lowercase letters, numbers, and hyphens only.
 
 # ─────────────────────────────────────────────
 # Globals — apply to all Lambda functions
@@ -88,6 +115,7 @@ Globals:
         MAX_STORAGE_MB: !Ref MaxStorageMB
         PRESIGNED_URL_EXPIRY: !Ref PresignedUrlExpirySeconds
         UPLOADS_PREFIX: "uploads/"
+        ALLOWED_ORIGIN: !Ref AllowedOrigin
         NODE_OPTIONS: "--enable-source-maps"
     # No provisioned concurrency — pay-per-use only
 
@@ -123,11 +151,11 @@ Resources:
             Status: Enabled
             AbortIncompleteMultipartUpload:
               DaysAfterInitiation: 1
-          # Optional: expire demo objects after DemoRetentionDays
+          # Expire objects after DemoRetentionDays (disabled if 0 — handled by condition below)
           - Id: DemoObjectExpiration
-            Status: Enabled
+            Status: !If [DemoExpirationEnabled, Enabled, Disabled]
             Prefix: "uploads/"
-            ExpirationInDays: !Ref DemoRetentionDays
+            ExpirationInDays: !If [DemoExpirationEnabled, !Ref DemoRetentionDays, 1]
       CorsConfiguration:
         CorsRules:
           - AllowedHeaders:
@@ -141,6 +169,103 @@ Resources:
             ExposedHeaders:
               - ETag
             MaxAge: 3000
+
+  # ── Cognito User Pool ──────────────────────
+  CloudVaultUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${ProjectName}-user-pool"
+      # Google is the only sign-in method — no username/password
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      # Minimal schema — name and email come from Google
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+        - Name: name
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+      # Token lifetimes
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false  # allow self-registration via Google
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: false
+          RequireUppercase: false
+          RequireNumbers: false
+          RequireSymbols: false
+      # ID token valid 1 hour; refresh token valid 30 days
+      # (users are silently re-authenticated via refresh token)
+
+  # ── Google Identity Provider ───────────────
+  GoogleIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      UserPoolId: !Ref CloudVaultUserPool
+      ProviderName: Google
+      ProviderType: Google
+      ProviderDetails:
+        client_id: !Ref GoogleClientId
+        client_secret: !Ref GoogleClientSecret
+        authorize_scopes: "email openid profile"
+      # Map Google profile attributes to Cognito attributes
+      AttributeMapping:
+        email: email
+        name: name
+        username: sub      # Google's 'sub' becomes Cognito username (stable ID)
+
+  # ── Cognito App Client ─────────────────────
+  CloudVaultUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    DependsOn: GoogleIdentityProvider
+    Properties:
+      ClientName: !Sub "${ProjectName}-web-client"
+      UserPoolId: !Ref CloudVaultUserPool
+      # No client secret — this is a public browser client
+      GenerateSecret: false
+      # Token validity
+      AccessTokenValidity: 1        # hours
+      IdTokenValidity: 1            # hours
+      RefreshTokenValidity: 30      # days
+      TokenValidityUnits:
+        AccessToken: hours
+        IdToken: hours
+        RefreshToken: days
+      # Only allow Google sign-in (no username/password)
+      SupportedIdentityProviders:
+        - Google
+      # Authorization code flow — most secure for SPAs
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - email
+        - openid
+        - profile
+      AllowedOAuthFlowsUserPoolClient: true
+      # Callback URLs — add your production URL here when deploying
+      CallbackURLs:
+        - !Sub "${AllowedOrigin}/callback"
+        - http://localhost:5173/callback
+      LogoutURLs:
+        - !Sub "${AllowedOrigin}"
+        - http://localhost:5173
+      # Prevent user enumeration
+      PreventUserExistenceErrors: ENABLED
+      # Enable token revocation
+      EnableTokenRevocation: true
+
+  # ── Cognito Hosted UI Domain ───────────────
+  CloudVaultUserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Ref CognitoDomainPrefix
+      UserPoolId: !Ref CloudVaultUserPool
 
   # ── IAM Role for Lambda ────────────────────
   CloudVaultLambdaRole:
@@ -175,6 +300,7 @@ Resources:
                       - "uploads/*"
                       - "uploads/"
               # Object-level operations scoped to uploads/ prefix only
+              # uploads/{userId}/* — per-user isolation enforced by Lambda
               - Sid: AllowObjectOperations
                 Effect: Allow
                 Action:
@@ -189,9 +315,20 @@ Resources:
     Type: AWS::Serverless::HttpApi
     Properties:
       StageName: v1
+      # JWT Authorizer — validates Cognito ID tokens automatically
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            IdentitySource: "$request.header.Authorization"
+            JwtConfiguration:
+              issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${CloudVaultUserPool}"
+              audience:
+                - !Ref CloudVaultUserPoolClient
       CorsConfiguration:
         AllowOrigins:
           - !Ref AllowedOrigin
+          - http://localhost:5173
         AllowMethods:
           - GET
           - POST
@@ -222,6 +359,9 @@ Resources:
             ApiId: !Ref CloudVaultApi
             Path: /health
             Method: GET
+            # Health endpoint is public — no auth required
+            Auth:
+              Authorizer: NONE
 
   ListFilesFunction:
     Type: AWS::Serverless::Function
@@ -315,6 +455,12 @@ Resources:
       RetentionInDays: !Ref LogRetentionDays
 
 # ─────────────────────────────────────────────
+# Conditions
+# ─────────────────────────────────────────────
+Conditions:
+  DemoExpirationEnabled: !Not [!Equals [!Ref DemoRetentionDays, 0]]
+
+# ─────────────────────────────────────────────
 # Outputs
 # ─────────────────────────────────────────────
 Outputs:
@@ -333,3 +479,20 @@ Outputs:
   LambdaRoleArn:
     Description: "Lambda execution role ARN"
     Value: !GetAtt CloudVaultLambdaRole.Arn
+
+  # ── Auth Outputs (needed for frontend .env) ──
+  CognitoUserPoolId:
+    Description: "Cognito User Pool ID — set as VITE_COGNITO_USER_POOL_ID in frontend/.env"
+    Value: !Ref CloudVaultUserPool
+
+  CognitoClientId:
+    Description: "Cognito App Client ID — set as VITE_COGNITO_CLIENT_ID in frontend/.env"
+    Value: !Ref CloudVaultUserPoolClient
+
+  CognitoHostedUiDomain:
+    Description: "Cognito Hosted UI base domain — set as VITE_COGNITO_DOMAIN in frontend/.env"
+    Value: !Sub "https://${CognitoDomainPrefix}.auth.${AWS::Region}.amazoncognito.com"
+
+  GoogleRedirectUriForConsole:
+    Description: "Add this URI to your Google Cloud Console OAuth 2.0 client's Authorized redirect URIs"
+    Value: !Sub "https://${CognitoDomainPrefix}.auth.${AWS::Region}.amazoncognito.com/oauth2/idpresponse"

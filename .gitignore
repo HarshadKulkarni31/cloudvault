@@ -49,3 +49,7 @@ coverage/
 # SAM artifacts
 .aws-sam/
 packaged.yaml
+
+# SAM deploy config — contains Google OAuth credentials as parameter_overrides
+# Copy samconfig.toml.example to samconfig.toml and fill in your values
+samconfig.toml

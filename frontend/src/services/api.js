@@ -5,10 +5,12 @@
  * environment variable — set in .env.local for local dev.
  *
  * SECURITY: No AWS credentials are used here.
- * File bytes are sent DIRECTLY to S3 via presigned URLs — never through this module's API calls.
+ * File bytes are sent DIRECTLY to S3 via presigned URLs — never through this module.
+ * Every authenticated request includes the Cognito ID token as a Bearer token.
  */
 
 import axios from 'axios';
+import { getIdToken } from './auth.js';
 
 const BASE_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, '') ?? '';
 
@@ -25,12 +27,25 @@ const apiClient = axios.create({
   timeout: 15000,
 });
 
+// ── Request interceptor — attach ID token as Bearer token ──
+// getIdToken() silently refreshes the token if it is about to expire.
+apiClient.interceptors.request.use(async (reqConfig) => {
+  const token = await getIdToken();
+  if (token) {
+    reqConfig.headers['Authorization'] = `Bearer ${token}`;
+  }
+  return reqConfig;
+});
+
 // ─────────────────────────────────────────────────────────
 // Normalise errors into a consistent shape
 // ─────────────────────────────────────────────────────────
 function normalizeError(err) {
   if (err.response?.data?.error) {
     return err.response.data.error; // { code, message }
+  }
+  if (err.response?.status === 401 || err.response?.status === 403) {
+    return { code: 'UNAUTHORIZED', message: 'Your session has expired. Please sign in again.' };
   }
   if (err.code === 'ECONNABORTED') {
     return { code: 'TIMEOUT', message: 'The request timed out. Please try again.' };
@@ -42,7 +57,7 @@ function normalizeError(err) {
 }
 
 // ─────────────────────────────────────────────────────────
-// Health check
+// Health check (public — no auth required)
 // ─────────────────────────────────────────────────────────
 export async function checkHealth() {
   try {
@@ -54,7 +69,7 @@ export async function checkHealth() {
 }
 
 // ─────────────────────────────────────────────────────────
-// List files
+// List files (authenticated)
 // ─────────────────────────────────────────────────────────
 export async function listFiles() {
   try {
@@ -92,12 +107,14 @@ export async function requestUploadUrl({ fileName, contentType, fileSize }) {
  * @param {File}     file        - Browser File object
  * @param {string}   contentType - Content-Type to set on the S3 object
  * @param {Function} onProgress  - Callback(percentComplete: number)
+ * @param {AbortSignal} signal   - Optional AbortSignal for cancellation
  */
-export async function uploadFileToS3(uploadUrl, file, contentType, onProgress) {
+export async function uploadFileToS3(uploadUrl, file, contentType, onProgress, signal) {
   try {
     await axios.put(uploadUrl, file, {
       headers: { 'Content-Type': contentType },
       timeout: 5 * 60 * 1000, // 5 minutes for large files
+      signal,
       onUploadProgress: (progressEvent) => {
         if (progressEvent.total) {
           const pct = Math.round((progressEvent.loaded / progressEvent.total) * 100);
@@ -107,6 +124,9 @@ export async function uploadFileToS3(uploadUrl, file, contentType, onProgress) {
     });
     return { success: true };
   } catch (err) {
+    if (axios.isCancel(err)) {
+      return { success: false, error: { code: 'UPLOAD_CANCELLED', message: 'Upload was cancelled.' } };
+    }
     if (err.response?.status === 403) {
       return {
         success: false,
@@ -134,8 +154,9 @@ export async function requestDownloadUrl(key) {
 // ─────────────────────────────────────────────────────────
 export async function deleteFile(key) {
   try {
-    // URL-encode key portions, but preserve the path structure
-    const encodedKey = encodeURIComponent(key);
+    // Encode each path segment individually to preserve the slash structure
+    // that API Gateway's {key+} greedy parameter expects.
+    const encodedKey = key.split('/').map(encodeURIComponent).join('/');
     const { data } = await apiClient.delete(`/files/${encodedKey}`);
     return { success: true, data: data.data };
   } catch (err) {

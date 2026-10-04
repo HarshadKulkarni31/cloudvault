@@ -15,5 +15,5 @@ resolve_s3 = true
 s3_prefix = "cloudvault"
 region = "ap-south-1"
 disable_rollback = true
-parameter_overrides = "ProjectName=\"cloudvault\" AllowedOrigin=\"http://localhost:5173\" MaxFileSizeMB=\"25\" MaxObjectCount=\"100\" MaxStorageMB=\"250\" PresignedUrlExpirySeconds=\"300\" LogRetentionDays=\"7\" DemoRetentionDays=\"30\""
+parameter_overrides = "ProjectName=\"cloudvault\" AllowedOrigin=\"http://localhost:5173\" MaxFileSizeMB=\"25\" MaxObjectCount=\"100\" MaxStorageMB=\"250\" PresignedUrlExpirySeconds=\"300\" LogRetentionDays=\"7\" DemoRetentionDays=\"30\" CognitoDomainPrefix=\"cloudvault-auth\" GoogleClientId=\"REPLACE_WITH_YOUR_GOOGLE_CLIENT_ID\" GoogleClientSecret=\"REPLACE_WITH_YOUR_GOOGLE_CLIENT_SECRET\""
 image_repositories = []

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, SortAsc, SortDesc, RefreshCw, AlertCircle, X } from 'lucide-react';
+import { Search, RefreshCw, AlertCircle, X } from 'lucide-react';
 
 import Navbar from './components/Navbar.jsx';
 import FileUploadZone from './components/FileUploadZone.jsx';
@@ -10,6 +10,8 @@ import StorageSummary from './components/StorageSummary.jsx';
 import ConfirmDeleteModal from './components/ConfirmDeleteModal.jsx';
 import EmptyState from './components/EmptyState.jsx';
 import LoadingState from './components/LoadingState.jsx';
+import LoginPage from './components/LoginPage.jsx';
+import CallbackPage from './components/CallbackPage.jsx';
 
 import {
   listFiles,
@@ -18,6 +20,22 @@ import {
   requestDownloadUrl,
   deleteFile,
 } from './services/api.js';
+import { isSignedIn, getCurrentUser } from './services/auth.js';
+
+// ─────────────────────────────────────────────────────────
+// Simple hash-based router (no react-router dependency)
+// ─────────────────────────────────────────────────────────
+function useRoute() {
+  const [path, setPath] = useState(() => window.location.pathname);
+
+  useEffect(() => {
+    const onPop = () => setPath(window.location.pathname);
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  return path;
+}
 
 // ─────────────────────────────────────────────────────────
 // Toast notification (simple inline implementation)
@@ -52,11 +70,11 @@ function Toast({ toasts, onDismiss }) {
 // Sort options
 // ─────────────────────────────────────────────────────────
 const SORT_OPTIONS = [
-  { value: 'newest', label: 'Newest first' },
-  { value: 'oldest', label: 'Oldest first' },
+  { value: 'newest',    label: 'Newest first' },
+  { value: 'oldest',   label: 'Oldest first' },
   { value: 'name_asc', label: 'Name A→Z' },
-  { value: 'name_desc', label: 'Name Z→A' },
-  { value: 'size_desc', label: 'Largest first' },
+  { value: 'name_desc',label: 'Name Z→A' },
+  { value: 'size_desc',label: 'Largest first' },
   { value: 'size_asc', label: 'Smallest first' },
 ];
 
@@ -74,11 +92,58 @@ function sortFiles(files, sortBy) {
 }
 
 // ─────────────────────────────────────────────────────────
-// App
+// App root — handles routing and auth gate
 // ─────────────────────────────────────────────────────────
 let toastCounter = 0;
 
 export default function App() {
+  const path = useRoute();
+
+  // Auth state — re-checked whenever the route changes (e.g. after callback)
+  const [authChecked, setAuthChecked] = useState(false);
+  const [signedIn, setSignedIn]       = useState(false);
+  const [user, setUser]               = useState(null);
+
+  useEffect(() => {
+    // Only check auth state on non-callback routes
+    if (path !== '/callback') {
+      const ok = isSignedIn();
+      setSignedIn(ok);
+      setUser(ok ? getCurrentUser() : null);
+      setAuthChecked(true);
+    }
+  }, [path]);
+
+  // Called by CallbackPage after successful token exchange
+  const handleAuthSuccess = useCallback(() => {
+    setSignedIn(true);
+    setUser(getCurrentUser());
+    setAuthChecked(true);
+    // Navigate to root
+    window.history.replaceState({}, document.title, '/');
+  }, []);
+
+  // ── Routing ──────────────────────────────────────────────
+  if (path === '/callback') {
+    return <CallbackPage onSuccess={handleAuthSuccess} />;
+  }
+
+  if (!authChecked) {
+    // Tiny flash-of-nothing prevention — renders nothing while checking sessionStorage
+    return null;
+  }
+
+  if (!signedIn) {
+    return <LoginPage />;
+  }
+
+  return <Vault user={user} />;
+}
+
+// ─────────────────────────────────────────────────────────
+// Vault — main app UI (only rendered when authenticated)
+// ─────────────────────────────────────────────────────────
+function Vault({ user }) {
   // ── State ──────────────────────────────────────────────
   const [files, setFiles]               = useState([]);
   const [loading, setLoading]           = useState(true);
@@ -92,19 +157,20 @@ export default function App() {
   const [uploadFile, setUploadFile]     = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError]   = useState(null);
+  const abortControllerRef              = useRef(null);
 
   // Download / delete state
   const [downloading, setDownloading]   = useState(null); // key string
   const [fileToDelete, setFileToDelete] = useState(null); // file object
   const [deleting, setDeleting]         = useState(null); // key string
 
-  const abortRef = useRef(false);
-
   // ── Toast helpers ──────────────────────────────────────
   const addToast = useCallback((message, type = 'success') => {
     const id = ++toastCounter;
     setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
+    const timer = setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
+    // Store timer ref on the id so we could clear it, but 4 s is fine for toasts
+    return () => clearTimeout(timer);
   }, []);
 
   const dismissToast = useCallback((id) => {
@@ -150,21 +216,29 @@ export default function App() {
     const { uploadUrl, key } = urlResult.data;
 
     // Step 2: PUT file directly to S3 (file bytes never go through Lambda)
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     const s3Result = await uploadFileToS3(
       uploadUrl,
       file,
       file.type || 'application/octet-stream',
-      (pct) => setUploadProgress(pct)
+      (pct) => setUploadProgress(pct),
+      controller.signal,
     );
+
+    abortControllerRef.current = null;
 
     if (!s3Result.success) {
       setUploadError(s3Result.error);
       setUploading(false);
-      addToast(s3Result.error.message, 'error');
+      if (s3Result.error.code !== 'UPLOAD_CANCELLED') {
+        addToast(s3Result.error.message, 'error');
+      }
       return;
     }
 
-    // Success
+    // Success — wait briefly to show 100% before clearing the progress bar
     setUploadProgress(100);
     addToast(`"${file.name}" uploaded successfully.`);
     setTimeout(() => {
@@ -174,6 +248,15 @@ export default function App() {
       fetchFiles(); // refresh list
     }, 1200);
   }, [addToast, fetchFiles]);
+
+  // ── Cancel upload ──────────────────────────────────────
+  const handleCancelUpload = useCallback(() => {
+    abortControllerRef.current?.abort();
+    setUploading(false);
+    setUploadFile(null);
+    setUploadProgress(0);
+    setUploadError(null);
+  }, []);
 
   // ── Download flow ──────────────────────────────────────
   const handleDownload = useCallback(async (key) => {
@@ -220,14 +303,14 @@ export default function App() {
   // ─────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar />
+      <Navbar user={user} />
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         {/* Page title */}
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">File Vault</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Securely store and retrieve files — uploads go directly to S3 via presigned URLs.
+            Securely store and retrieve your files — uploads go directly to S3 via presigned URLs.
           </p>
         </div>
 
@@ -240,6 +323,7 @@ export default function App() {
                 fileName={uploadFile.name}
                 progress={uploadProgress}
                 error={uploadError}
+                onCancel={uploading ? handleCancelUpload : undefined}
               />
             )}
           </div>
