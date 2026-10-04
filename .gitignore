@@ -51,5 +51,8 @@ coverage/
 packaged.yaml
 
 # SAM deploy config — contains Google OAuth credentials as parameter_overrides
-# Copy samconfig.toml.example to samconfig.toml and fill in your values
+# Copy infrastructure/samconfig.toml.example to infrastructure/samconfig.toml and fill in your values
+**/samconfig.toml
 samconfig.toml
+!samconfig.toml.example
+!**/samconfig.toml.example
