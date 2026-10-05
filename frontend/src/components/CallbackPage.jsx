@@ -1,35 +1,35 @@
-import { useEffect, useState } from 'react';
-import { Cloud, Loader2, AlertCircle } from 'lucide-react';
-import { handleCallback } from '../services/auth.js';
+import { useEffect, useRef, useState } from "react";
+import { Cloud, AlertCircle } from "lucide-react";
+import { handleCallback } from "../services/auth.js";
 
 /**
- * CallbackPage — handles the OAuth redirect from Cognito.
+ * Handles the OAuth redirect from Cognito.
  *
- * Cognito redirects to /callback?code=...&state=...
- * This component exchanges the code for tokens and then navigates to the app root.
- *
- * @param {{ onSuccess: () => void }} props
+ * React 18 StrictMode may execute effects twice in development.
+ * We therefore create the callback promise only once and let both
+ * effect executions observe the same result.
  */
 export default function CallbackPage({ onSuccess }) {
   const [error, setError] = useState(null);
+  const callbackPromiseRef = useRef(null);
 
   useEffect(() => {
-    let cancelled = false;
+    // Start the OAuth callback exactly once.
+    if (!callbackPromiseRef.current) {
+      callbackPromiseRef.current = handleCallback();
+    }
 
-    (async () => {
-      const result = await handleCallback();
-      if (cancelled) return;
-
-      if (result.success) {
-        // Clean up the URL and hand control back to the app
-        window.history.replaceState({}, document.title, '/');
-        onSuccess();
-      } else {
-        setError(result.error || 'Authentication failed. Please try again.');
-      }
-    })();
-
-    return () => { cancelled = true; };
+    callbackPromiseRef.current
+      .then((result) => {
+        if (result.success) {
+          onSuccess();
+        } else {
+          setError(result.error || "Authentication failed. Please try again.");
+        }
+      })
+      .catch((err) => {
+        setError(err?.message || "Authentication failed. Please try again.");
+      });
   }, [onSuccess]);
 
   return (
@@ -41,27 +41,30 @@ export default function CallbackPage({ onSuccess }) {
 
         {error ? (
           <div className="max-w-sm space-y-3">
-            <div className="flex items-start gap-2 text-sm text-red-700 bg-red-50
-                            border border-red-200 rounded-lg px-4 py-3">
+            <div className="flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
               <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+
               <div className="text-left">
                 <p className="font-medium">Sign-in failed</p>
                 <p className="text-xs mt-0.5 text-red-600">{error}</p>
               </div>
             </div>
+
             <a
               href="/"
               className="inline-block text-sm text-brand-600 hover:underline underline-offset-2"
             >
-              ← Back to sign in
+              Back to sign in
             </a>
           </div>
         ) : (
-          <>
-            <Loader2 className="w-6 h-6 text-brand-500 animate-spin mx-auto" />
-            <p className="text-sm text-gray-600 font-medium">Signing you in…</p>
-            <p className="text-xs text-gray-400">Completing authentication with Google</p>
-          </>
+          <div>
+            <p className="text-sm font-medium text-gray-700">Signing you in…</p>
+
+            <p className="text-xs text-gray-400 mt-1">
+              Completing secure authentication
+            </p>
+          </div>
         )}
       </div>
     </div>

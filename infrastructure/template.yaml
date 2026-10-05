@@ -221,16 +221,16 @@ Resources:
         - email
 
       # Keep the existing schema attributes
-      Schema:
-        - Name: email
-          AttributeDataType: String
-          Mutable: true
-          Required: true
-
-        - Name: name
-          AttributeDataType: String
-          Mutable: true
-          Required: false
+      #     /*Schema:
+      #       - Name: email
+      #          AttributeDataType: String
+      #          Mutable: true
+      #          Required: true
+      #
+      #        - Name: name
+      #          AttributeDataType: String
+      #          Mutable: true
+      #          Required: false
 
       AdminCreateUserConfig:
         AllowAdminCreateUserOnly: false
