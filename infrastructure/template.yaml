@@ -51,11 +51,10 @@ Parameters:
     Description: Short project name used in resource naming
 
   AllowedOrigins:
-  Type: CommaDelimitedList
-  Default: http://localhost:5173,https://d3d8v2xqjcvjs2.cloudfront.net
-  Description: >
-    Frontend origins allowed by CORS.
-    Includes the local development origin and the production CloudFront origin.
+    Type: String
+    Default: "http://localhost:5173,https://d3d8v2xqjcvjs2.cloudfront.net"
+    Description: >
+      Comma-separated frontend origins allowed by CORS.
 
   MaxFileSizeMB:
     Type: Number
@@ -197,8 +196,7 @@ Resources:
               - PUT
               - HEAD
 
-            AllowedOrigins:
-              - !Ref AllowedOrigins
+            AllowedOrigins: !Split [",", !Ref AllowedOrigins]
 
             ExposedHeaders:
               - ETag
@@ -408,7 +406,7 @@ Resources:
       # Only one AllowOrigin entry.
       # AllowedOrigin already defaults to http://localhost:5173.
       CorsConfiguration:
-        AllowOrigins: !Ref AllowedOrigins
+        AllowOrigins: !Split [",", !Ref AllowedOrigins]
 
         AllowMethods:
           - GET
