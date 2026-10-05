@@ -113,6 +113,3 @@ sam delete --stack-name cloudvault
 
 ---
 
-## License
-
-MIT
