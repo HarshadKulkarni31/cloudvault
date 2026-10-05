@@ -50,12 +50,12 @@ Parameters:
     Default: cloudvault
     Description: Short project name used in resource naming
 
-  AllowedOrigin:
-    Type: String
-    Default: http://localhost:5173
-    Description: >
-      Frontend origin for CORS. Use http://localhost:5173 for local dev.
-      Set to your deployed frontend URL in production (e.g. https://yoursite.com).
+  AllowedOrigins:
+  Type: CommaDelimitedList
+  Default: http://localhost:5173,https://d3d8v2xqjcvjs2.cloudfront.net
+  Description: >
+    Frontend origins allowed by CORS.
+    Includes the local development origin and the production CloudFront origin.
 
   MaxFileSizeMB:
     Type: Number
@@ -408,8 +408,7 @@ Resources:
       # Only one AllowOrigin entry.
       # AllowedOrigin already defaults to http://localhost:5173.
       CorsConfiguration:
-        AllowOrigins:
-          - !Ref AllowedOrigin
+        AllowOrigins: !Ref AllowedOrigins
 
         AllowMethods:
           - GET

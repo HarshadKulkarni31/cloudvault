@@ -1,0 +1,7 @@
+{
+  "Name": "cloudvault-frontend-oac",
+  "Description": "OAC for CloudVault frontend S3 bucket",
+  "SigningProtocol": "sigv4",
+  "SigningBehavior": "always",
+  "OriginAccessControlOriginType": "s3"
+}
