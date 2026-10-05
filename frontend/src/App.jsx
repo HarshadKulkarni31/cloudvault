@@ -303,6 +303,28 @@ function Vault({ user }) {
     [addToast],
   );
 
+  const handlePreview = useCallback(
+    async (file) => {
+      setPreviewing(file.key);
+      setPreviewUrl(null);
+
+      const result = await requestDownloadUrl(file.key);
+
+      setPreviewing(null);
+
+      if (!result.success) {
+        addToast(result.error.message, "error");
+        return;
+      }
+
+      setPreviewUrl({
+        file,
+        url: result.data.downloadUrl,
+      });
+    },
+    [addToast],
+  );
+
   // ── Delete flow ────────────────────────────────────────
   const handleDeleteConfirm = useCallback(async () => {
     if (!fileToDelete) return;
@@ -452,9 +474,11 @@ function Vault({ user }) {
                 <div className="hidden md:block">
                   <FileTable
                     files={displayFiles}
+                    onPreview={handlePreview}
                     onDownload={handleDownload}
                     onDelete={setFileToDelete}
                     downloading={downloading}
+                    previewing={previewing}
                     deleting={deleting}
                   />
                 </div>
@@ -465,9 +489,11 @@ function Vault({ user }) {
                     <FileCard
                       key={file.key}
                       file={file}
+                      onPreview={handlePreview}
                       onDownload={handleDownload}
                       onDelete={setFileToDelete}
                       downloading={downloading}
+                      previewing={previewing}
                       deleting={deleting}
                     />
                   ))}
@@ -485,6 +511,10 @@ function Vault({ user }) {
         </div>
       </main>
 
+      <FilePreviewModal
+        preview={previewUrl}
+        onClose={() => setPreviewUrl(null)}
+      />
       {/* Delete confirmation modal */}
       <ConfirmDeleteModal
         file={fileToDelete}
