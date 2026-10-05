@@ -1,15 +1,28 @@
-import { formatFileSize } from '../utils/formatFileSize.js';
-import { formatDate, formatDateFull } from '../utils/formatDate.js';
-import { Download, Trash2, FileText, Image, Archive, File } from 'lucide-react';
+import { formatFileSize } from "../utils/formatFileSize.js";
+import { formatDate, formatDateFull } from "../utils/formatDate.js";
+import {
+  Download,
+  Trash2,
+  Eye,
+  FileText,
+  Image,
+  Archive,
+  File,
+} from "lucide-react";
 
 /**
  * Return an icon component for a given filename.
  */
 function FileIcon({ name, className }) {
-  const ext = name?.split('.').pop()?.toLowerCase();
-  if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) return <Image className={className} />;
-  if (['zip'].includes(ext)) return <Archive className={className} />;
-  if (['pdf', 'doc', 'docx', 'txt', 'csv', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext))
+  const ext = name?.split(".").pop()?.toLowerCase();
+  if (["jpg", "jpeg", "png", "gif"].includes(ext))
+    return <Image className={className} />;
+  if (["zip"].includes(ext)) return <Archive className={className} />;
+  if (
+    ["pdf", "doc", "docx", "txt", "csv", "xls", "xlsx", "ppt", "pptx"].includes(
+      ext,
+    )
+  )
     return <FileText className={className} />;
   return <File className={className} />;
 }
@@ -25,7 +38,13 @@ function FileIcon({ name, className }) {
  *   deleting: string | null,
  * }} props
  */
-export default function FileTable({ files, onDownload, onDelete, downloading, deleting }) {
+export default function FileTable({
+  files,
+  onDownload,
+  onDelete,
+  downloading,
+  deleting,
+}) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -50,7 +69,10 @@ export default function FileTable({ files, onDownload, onDelete, downloading, de
                     name={file.name}
                     className="w-4 h-4 text-gray-400 flex-shrink-0"
                   />
-                  <span className="truncate font-medium text-gray-800 max-w-xs" title={file.name}>
+                  <span
+                    className="truncate font-medium text-gray-800 max-w-xs"
+                    title={file.name}
+                  >
                     {file.name}
                   </span>
                 </div>
@@ -63,7 +85,10 @@ export default function FileTable({ files, onDownload, onDelete, downloading, de
 
               {/* Date */}
               <td className="py-3 px-2 text-gray-500 whitespace-nowrap">
-                <time dateTime={file.lastModified} title={formatDateFull(file.lastModified)}>
+                <time
+                  dateTime={file.lastModified}
+                  title={formatDateFull(file.lastModified)}
+                >
                   {formatDate(file.lastModified)}
                 </time>
               </td>
@@ -78,10 +103,11 @@ export default function FileTable({ files, onDownload, onDelete, downloading, de
                     className="btn-ghost rounded-md px-2 py-1.5 text-gray-600
                                hover:text-brand-600 disabled:opacity-40"
                   >
-                    {downloading === file.key
-                      ? <span className="text-xs">…</span>
-                      : <Download className="w-4 h-4" />
-                    }
+                    {downloading === file.key ? (
+                      <span className="text-xs">…</span>
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
                   </button>
                   <button
                     onClick={() => onDelete(file)}
@@ -90,10 +116,11 @@ export default function FileTable({ files, onDownload, onDelete, downloading, de
                     className="btn-ghost rounded-md px-2 py-1.5 text-gray-600
                                hover:text-red-600 disabled:opacity-40"
                   >
-                    {deleting === file.key
-                      ? <span className="text-xs">…</span>
-                      : <Trash2 className="w-4 h-4" />
-                    }
+                    {deleting === file.key ? (
+                      <span className="text-xs">…</span>
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
               </td>
