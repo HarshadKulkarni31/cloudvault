@@ -1,5 +1,7 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
+
 Transform: AWS::Serverless-2016-10-31
+
 Description: >
   CloudVault — Near-Zero-Cost Serverless Cloud File Vault
   Private S3 bucket + Lambda + API Gateway HTTP API + Cognito Google Auth
@@ -8,25 +10,40 @@ Description: >
 # CAPABILITY_NAMED_IAM is required because this template creates a named IAM role.
 # Deploy with: sam deploy --capabilities CAPABILITY_NAMED_IAM
 # Or use the samconfig.toml in this directory which sets it automatically.
+
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
           default: "Storage Guardrails"
-        Parameters: [MaxFileSizeMB, MaxObjectCount, MaxStorageMB, DemoRetentionDays]
+        Parameters:
+          - MaxFileSizeMB
+          - MaxObjectCount
+          - MaxStorageMB
+          - DemoRetentionDays
+
       - Label:
           default: "API & Security"
-        Parameters: [AllowedOrigin, PresignedUrlExpirySeconds]
+        Parameters:
+          - AllowedOrigin
+          - PresignedUrlExpirySeconds
+
       - Label:
           default: "Authentication"
-        Parameters: [GoogleClientId, GoogleClientSecret, CognitoDomainPrefix]
+        Parameters:
+          - GoogleClientId
+          - GoogleClientSecret
+          - CognitoDomainPrefix
+
       - Label:
           default: "Observability"
-        Parameters: [LogRetentionDays]
+        Parameters:
+          - LogRetentionDays
 
 # ─────────────────────────────────────────────
 # Parameters
 # ─────────────────────────────────────────────
+
 Parameters:
   ProjectName:
     Type: String
@@ -75,6 +92,7 @@ Parameters:
       Set to 0 to disable automatic expiration.
 
   # ── Authentication Parameters ──────────────────────────
+
   GoogleClientId:
     Type: String
     Description: >
@@ -94,19 +112,25 @@ Parameters:
     Default: cloudvault-auth
     Description: >
       Globally unique prefix for the Cognito Hosted UI domain.
-      Your Hosted UI will be at: https://<prefix>.auth.<region>.amazoncognito.com
+      Your Hosted UI will be at:
+      https://<prefix>.auth.<region>.amazoncognito.com
       Must be lowercase letters, numbers, and hyphens only.
 
 # ─────────────────────────────────────────────
 # Globals — apply to all Lambda functions
 # ─────────────────────────────────────────────
+
 Globals:
   Function:
     Runtime: nodejs20.x
+
     Architectures:
-      - arm64               # Graviton2 — cheaper & faster for simple I/O handlers
-    MemorySize: 256          # Enough for presigned-URL generation; no file bytes handled
+      - arm64
+
+    MemorySize: 256
+
     Timeout: 15
+
     Environment:
       Variables:
         BUCKET_NAME: !Ref CloudVaultBucket
@@ -117,82 +141,100 @@ Globals:
         UPLOADS_PREFIX: "uploads/"
         ALLOWED_ORIGIN: !Ref AllowedOrigin
         NODE_OPTIONS: "--enable-source-maps"
-    # No provisioned concurrency — pay-per-use only
 
 # ─────────────────────────────────────────────
 # Resources
 # ─────────────────────────────────────────────
-Resources:
 
+Resources:
   # ── S3 Bucket ─────────────────────────────
+
   CloudVaultBucket:
     Type: AWS::S3::Bucket
+
     Properties:
       BucketName: !Sub "${ProjectName}-${AWS::AccountId}-${AWS::Region}"
-      # Block all public access — mandatory
+
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-      # Default encryption at rest
+
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
-      # No versioning for V1 — versioning multiplies stored objects and cost
+
       VersioningConfiguration:
         Status: Suspended
-      # No cross-region replication
+
       LifecycleConfiguration:
         Rules:
-          # Abort incomplete multipart uploads after 1 day
           - Id: AbortIncompleteMultipartUploads
             Status: Enabled
             AbortIncompleteMultipartUpload:
               DaysAfterInitiation: 1
-          # Expire objects after DemoRetentionDays (disabled if 0 — handled by condition below)
+
           - Id: DemoObjectExpiration
-            Status: !If [DemoExpirationEnabled, Enabled, Disabled]
+            Status: !If
+              - DemoExpirationEnabled
+              - Enabled
+              - Disabled
             Prefix: "uploads/"
-            ExpirationInDays: !If [DemoExpirationEnabled, !Ref DemoRetentionDays, 1]
+            ExpirationInDays: !If
+              - DemoExpirationEnabled
+              - !Ref DemoRetentionDays
+              - 1
+
       CorsConfiguration:
         CorsRules:
           - AllowedHeaders:
               - "*"
+
             AllowedMethods:
               - GET
               - PUT
               - HEAD
+
             AllowedOrigins:
               - !Ref AllowedOrigin
+
             ExposedHeaders:
               - ETag
+
             MaxAge: 3000
 
   # ── Cognito User Pool ──────────────────────
+
   CloudVaultUserPool:
     Type: AWS::Cognito::UserPool
+
     Properties:
       UserPoolName: !Sub "${ProjectName}-user-pool"
-      # Google is the only sign-in method — no username/password
+
+      # Google is the only sign-in method
       UsernameAttributes:
         - email
+
       AutoVerifiedAttributes:
         - email
-      # Minimal schema — name and email come from Google
+
+      # Keep the existing schema attributes
       Schema:
         - Name: email
           AttributeDataType: String
           Mutable: true
           Required: true
+
         - Name: name
           AttributeDataType: String
           Mutable: true
           Required: false
-      # Token lifetimes
+
       AdminCreateUserConfig:
-        AllowAdminCreateUserOnly: false  # allow self-registration via Google
+        AllowAdminCreateUserOnly: false
+
       Policies:
         PasswordPolicy:
           MinimumLength: 8
@@ -200,179 +242,225 @@ Resources:
           RequireUppercase: false
           RequireNumbers: false
           RequireSymbols: false
-      # ID token valid 1 hour; refresh token valid 30 days
-      # (users are silently re-authenticated via refresh token)
 
   # ── Google Identity Provider ───────────────
+
   GoogleIdentityProvider:
     Type: AWS::Cognito::UserPoolIdentityProvider
+
     Properties:
       UserPoolId: !Ref CloudVaultUserPool
+
       ProviderName: Google
+
       ProviderType: Google
+
       ProviderDetails:
         client_id: !Ref GoogleClientId
         client_secret: !Ref GoogleClientSecret
         authorize_scopes: "email openid profile"
-      # Map Google profile attributes to Cognito attributes
+
       AttributeMapping:
         email: email
         name: name
-        username: sub      # Google's 'sub' becomes Cognito username (stable ID)
+        username: sub
 
   # ── Cognito App Client ─────────────────────
+
   CloudVaultUserPoolClient:
     Type: AWS::Cognito::UserPoolClient
-    DependsOn: GoogleIdentityProvider
+
+    DependsOn:
+      - GoogleIdentityProvider
+
     Properties:
       ClientName: !Sub "${ProjectName}-web-client"
+
       UserPoolId: !Ref CloudVaultUserPool
-      # No client secret — this is a public browser client
+
       GenerateSecret: false
-      # Token validity
-      AccessTokenValidity: 1        # hours
-      IdTokenValidity: 1            # hours
-      RefreshTokenValidity: 30      # days
+
+      AccessTokenValidity: 1
+      IdTokenValidity: 1
+      RefreshTokenValidity: 30
+
       TokenValidityUnits:
         AccessToken: hours
         IdToken: hours
         RefreshToken: days
-      # Only allow Google sign-in (no username/password)
+
       SupportedIdentityProviders:
         - Google
-      # Authorization code flow — most secure for SPAs
+
       AllowedOAuthFlows:
         - code
+
       AllowedOAuthScopes:
         - email
         - openid
         - profile
+
       AllowedOAuthFlowsUserPoolClient: true
-      # Callback URLs — add your production URL here when deploying
+
       CallbackURLs:
         - !Sub "${AllowedOrigin}/callback"
         - http://localhost:5173/callback
+
       LogoutURLs:
         - !Sub "${AllowedOrigin}"
         - http://localhost:5173
-      # Prevent user enumeration
+
       PreventUserExistenceErrors: ENABLED
-      # Enable token revocation
+
       EnableTokenRevocation: true
 
   # ── Cognito Hosted UI Domain ───────────────
+
   CloudVaultUserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
+
     Properties:
       Domain: !Ref CognitoDomainPrefix
       UserPoolId: !Ref CloudVaultUserPool
 
   # ── IAM Role for Lambda ────────────────────
+
   CloudVaultLambdaRole:
     Type: AWS::IAM::Role
+
     Properties:
       RoleName: !Sub "${ProjectName}-lambda-role"
+
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
+
         Statement:
           - Effect: Allow
+
             Principal:
               Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
+
+            Action:
+              - sts:AssumeRole
+
       ManagedPolicyArns:
-        # Basic execution — writes logs to CloudWatch
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
       Policies:
         - PolicyName: CloudVaultS3LeastPrivilege
+
           PolicyDocument:
             Version: "2012-10-17"
+
             Statement:
-              # ListBucket on the bucket itself (not objects)
               - Sid: AllowListBucket
+
                 Effect: Allow
+
                 Action:
                   - s3:ListBucket
+
                 Resource:
                   - !GetAtt CloudVaultBucket.Arn
+
                 Condition:
                   StringLike:
                     s3:prefix:
                       - "uploads/*"
                       - "uploads/"
-              # Object-level operations scoped to uploads/ prefix only
-              # uploads/{userId}/* — per-user isolation enforced by Lambda
+
               - Sid: AllowObjectOperations
+
                 Effect: Allow
+
                 Action:
                   - s3:GetObject
                   - s3:PutObject
                   - s3:DeleteObject
+
                 Resource:
                   - !Sub "${CloudVaultBucket.Arn}/uploads/*"
 
   # ── API Gateway HTTP API ───────────────────
+
   CloudVaultApi:
     Type: AWS::Serverless::HttpApi
+
     Properties:
       StageName: v1
+
       # JWT Authorizer — validates Cognito ID tokens automatically
       Auth:
         DefaultAuthorizer: CognitoAuthorizer
+
         Authorizers:
           CognitoAuthorizer:
             IdentitySource: "$request.header.Authorization"
+
             JwtConfiguration:
-              issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${CloudVaultUserPool}"
+              issuer: !Sub
+                - "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPoolId}"
+                - UserPoolId: !Ref CloudVaultUserPool
+
               audience:
                 - !Ref CloudVaultUserPoolClient
+
+      # Only one AllowOrigin entry.
+      # AllowedOrigin already defaults to http://localhost:5173.
       CorsConfiguration:
         AllowOrigins:
           - !Ref AllowedOrigin
-          - http://localhost:5173
+
         AllowMethods:
           - GET
           - POST
           - DELETE
           - OPTIONS
+
         AllowHeaders:
           - Content-Type
           - Authorization
           - X-Requested-With
+
         MaxAge: 600
 
   # ── Lambda Functions ───────────────────────
-  # CodeUri points to ../backend/ (not just handlers/) so that the root
-  # package.json with "type":"module" is included in the Lambda package,
-  # enabling ES module import/export syntax in all handlers.
 
   HealthFunction:
     Type: AWS::Serverless::Function
+
     Properties:
       FunctionName: !Sub "${ProjectName}-health"
       CodeUri: ../backend/
       Handler: src/handlers/health.handler
       Role: !GetAtt CloudVaultLambdaRole.Arn
+
       Events:
         HealthApi:
           Type: HttpApi
+
           Properties:
             ApiId: !Ref CloudVaultApi
             Path: /health
             Method: GET
-            # Health endpoint is public — no auth required
+
+            # Health endpoint is public
             Auth:
               Authorizer: NONE
 
   ListFilesFunction:
     Type: AWS::Serverless::Function
+
     Properties:
       FunctionName: !Sub "${ProjectName}-list-files"
       CodeUri: ../backend/
       Handler: src/handlers/listFiles.handler
       Role: !GetAtt CloudVaultLambdaRole.Arn
+
       Events:
         ListFilesApi:
           Type: HttpApi
+
           Properties:
             ApiId: !Ref CloudVaultApi
             Path: /files
@@ -380,14 +468,17 @@ Resources:
 
   CreateUploadUrlFunction:
     Type: AWS::Serverless::Function
+
     Properties:
       FunctionName: !Sub "${ProjectName}-create-upload-url"
       CodeUri: ../backend/
       Handler: src/handlers/createUploadUrl.handler
       Role: !GetAtt CloudVaultLambdaRole.Arn
+
       Events:
         CreateUploadUrlApi:
           Type: HttpApi
+
           Properties:
             ApiId: !Ref CloudVaultApi
             Path: /upload-url
@@ -395,14 +486,17 @@ Resources:
 
   CreateDownloadUrlFunction:
     Type: AWS::Serverless::Function
+
     Properties:
       FunctionName: !Sub "${ProjectName}-create-download-url"
       CodeUri: ../backend/
       Handler: src/handlers/createDownloadUrl.handler
       Role: !GetAtt CloudVaultLambdaRole.Arn
+
       Events:
         CreateDownloadUrlApi:
           Type: HttpApi
+
           Properties:
             ApiId: !Ref CloudVaultApi
             Path: /download-url
@@ -410,46 +504,55 @@ Resources:
 
   DeleteFileFunction:
     Type: AWS::Serverless::Function
+
     Properties:
       FunctionName: !Sub "${ProjectName}-delete-file"
       CodeUri: ../backend/
       Handler: src/handlers/deleteFile.handler
       Role: !GetAtt CloudVaultLambdaRole.Arn
+
       Events:
         DeleteFileApi:
           Type: HttpApi
+
           Properties:
             ApiId: !Ref CloudVaultApi
             Path: /files/{key+}
             Method: DELETE
 
-  # ── CloudWatch Log Groups (explicit retention) ──
+  # ── CloudWatch Log Groups ──────────────────
+
   HealthFunctionLogGroup:
     Type: AWS::Logs::LogGroup
+
     Properties:
       LogGroupName: !Sub "/aws/lambda/${ProjectName}-health"
       RetentionInDays: !Ref LogRetentionDays
 
   ListFilesFunctionLogGroup:
     Type: AWS::Logs::LogGroup
+
     Properties:
       LogGroupName: !Sub "/aws/lambda/${ProjectName}-list-files"
       RetentionInDays: !Ref LogRetentionDays
 
   CreateUploadUrlFunctionLogGroup:
     Type: AWS::Logs::LogGroup
+
     Properties:
       LogGroupName: !Sub "/aws/lambda/${ProjectName}-create-upload-url"
       RetentionInDays: !Ref LogRetentionDays
 
   CreateDownloadUrlFunctionLogGroup:
     Type: AWS::Logs::LogGroup
+
     Properties:
       LogGroupName: !Sub "/aws/lambda/${ProjectName}-create-download-url"
       RetentionInDays: !Ref LogRetentionDays
 
   DeleteFileFunctionLogGroup:
     Type: AWS::Logs::LogGroup
+
     Properties:
       LogGroupName: !Sub "/aws/lambda/${ProjectName}-delete-file"
       RetentionInDays: !Ref LogRetentionDays
@@ -457,12 +560,17 @@ Resources:
 # ─────────────────────────────────────────────
 # Conditions
 # ─────────────────────────────────────────────
+
 Conditions:
-  DemoExpirationEnabled: !Not [!Equals [!Ref DemoRetentionDays, 0]]
+  DemoExpirationEnabled: !Not
+    - !Equals
+      - !Ref DemoRetentionDays
+      - 0
 
 # ─────────────────────────────────────────────
 # Outputs
 # ─────────────────────────────────────────────
+
 Outputs:
   ApiBaseUrl:
     Description: "API Gateway HTTP API base URL — set as VITE_API_URL in frontend/.env"
@@ -480,7 +588,8 @@ Outputs:
     Description: "Lambda execution role ARN"
     Value: !GetAtt CloudVaultLambdaRole.Arn
 
-  # ── Auth Outputs (needed for frontend .env) ──
+  # ── Auth Outputs ───────────────────────────
+
   CognitoUserPoolId:
     Description: "Cognito User Pool ID — set as VITE_COGNITO_USER_POOL_ID in frontend/.env"
     Value: !Ref CloudVaultUserPool
