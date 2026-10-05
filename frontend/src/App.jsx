@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Search, RefreshCw, AlertCircle, X } from "lucide-react";
+import FilePreviewModal from "./components/FilePreviewModal.jsx";
 
 import Navbar from "./components/Navbar.jsx";
 import FileUploadZone from "./components/FileUploadZone.jsx";
@@ -175,10 +176,12 @@ function Vault({ user }) {
   const [uploadError, setUploadError] = useState(null);
   const abortControllerRef = useRef(null);
 
-  // Download / delete state
-  const [downloading, setDownloading] = useState(null); // key string
-  const [fileToDelete, setFileToDelete] = useState(null); // file object
-  const [deleting, setDeleting] = useState(null); // key string
+  // Download / preview / delete state
+  const [downloading, setDownloading] = useState(null);
+  const [previewing, setPreviewing] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [fileToDelete, setFileToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(null);
 
   // ── Toast helpers ──────────────────────────────────────
   const addToast = useCallback((message, type = "success") => {
