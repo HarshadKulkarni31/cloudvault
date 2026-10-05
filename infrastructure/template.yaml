@@ -138,7 +138,7 @@ Globals:
         MAX_STORAGE_MB: !Ref MaxStorageMB
         PRESIGNED_URL_EXPIRY: !Ref PresignedUrlExpirySeconds
         UPLOADS_PREFIX: "uploads/"
-        ALLOWED_ORIGIN: !Select [0, !Ref AllowedOrigins]
+        ALLOWED_ORIGIN: "http://localhost:5173"
         NODE_OPTIONS: "--enable-source-maps"
 
 # ─────────────────────────────────────────────
@@ -406,7 +406,9 @@ Resources:
       # Only one AllowOrigin entry.
       # AllowedOrigin already defaults to http://localhost:5173.
       CorsConfiguration:
-        AllowOrigins: !Split [",", !Ref AllowedOrigins]
+        AllowOrigins:
+          - http://localhost:5173
+          - https://d3d8v2xqjcvjs2.cloudfront.net
 
         AllowMethods:
           - GET
