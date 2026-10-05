@@ -40,9 +40,11 @@ function FileIcon({ name, className }) {
  */
 export default function FileTable({
   files,
+  onPreview,
   onDownload,
   onDelete,
   downloading,
+  previewing,
   deleting,
 }) {
   return (
@@ -93,15 +95,30 @@ export default function FileTable({
                 </time>
               </td>
 
-              {/* Actions */}
               <td className="py-3 pl-2 pr-4 text-right">
                 <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
-                    onClick={() => onDownload(file.key)}
-                    disabled={!!downloading || !!deleting}
-                    aria-label={`Download ${file.name}`}
+                    onClick={() => onPreview(file)}
+                    disabled={!!downloading || !!previewing || !!deleting}
+                    aria-label={`Preview ${file.name}`}
+                    title="Preview"
                     className="btn-ghost rounded-md px-2 py-1.5 text-gray-600
-                               hover:text-brand-600 disabled:opacity-40"
+                 hover:text-brand-600 disabled:opacity-40"
+                  >
+                    {previewing === file.key ? (
+                      <span className="text-xs">…</span>
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => onDownload(file.key)}
+                    disabled={!!downloading || !!previewing || !!deleting}
+                    aria-label={`Download ${file.name}`}
+                    title="Download"
+                    className="btn-ghost rounded-md px-2 py-1.5 text-gray-600
+                 hover:text-brand-600 disabled:opacity-40"
                   >
                     {downloading === file.key ? (
                       <span className="text-xs">…</span>
@@ -109,12 +126,14 @@ export default function FileTable({
                       <Download className="w-4 h-4" />
                     )}
                   </button>
+
                   <button
                     onClick={() => onDelete(file)}
-                    disabled={!!downloading || !!deleting}
+                    disabled={!!downloading || !!previewing || !!deleting}
                     aria-label={`Delete ${file.name}`}
+                    title="Delete"
                     className="btn-ghost rounded-md px-2 py-1.5 text-gray-600
-                               hover:text-red-600 disabled:opacity-40"
+                 hover:text-red-600 disabled:opacity-40"
                   >
                     {deleting === file.key ? (
                       <span className="text-xs">…</span>
