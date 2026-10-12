@@ -82,6 +82,19 @@ const SORT_OPTIONS = [
   { value: "size_asc", label: "Smallest first" },
 ];
 
+const THEME_STORAGE_KEY = "cloudvault-theme";
+
+function getStoredThemeMode() {
+  return localStorage.getItem(THEME_STORAGE_KEY) || "system";
+}
+
+function applyThemeMode(themeMode) {
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const useDark = themeMode === "dark" || (themeMode === "system" && prefersDark);
+
+  document.documentElement.classList.toggle("dark", useDark);
+}
+
 function sortFiles(files, sortBy) {
   const sorted = [...files];
   switch (sortBy) {
@@ -113,6 +126,22 @@ let toastCounter = 0;
 
 export default function App() {
   const path = useRoute();
+  const [themeMode, setThemeMode] = useState(getStoredThemeMode);
+
+  useEffect(() => {
+    applyThemeMode(themeMode);
+    localStorage.setItem(THEME_STORAGE_KEY, themeMode);
+
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleSystemThemeChange = () => {
+      if (themeMode === "system") {
+        applyThemeMode("system");
+      }
+    };
+
+    mediaQuery.addEventListener("change", handleSystemThemeChange);
+    return () => mediaQuery.removeEventListener("change", handleSystemThemeChange);
+  }, [themeMode]);
 
   // Auth state — re-checked whenever the route changes (e.g. after callback)
   const [authChecked, setAuthChecked] = useState(false);
@@ -151,16 +180,21 @@ export default function App() {
   }
 
   if (!signedIn) {
-    return <LoginPage />;
+    return (
+      <LoginPage
+        themeMode={themeMode}
+        onThemeChange={setThemeMode}
+      />
+    );
   }
 
-  return <Vault user={user} />;
+  return <Vault user={user} themeMode={themeMode} onThemeChange={setThemeMode} />;
 }
 
 // ─────────────────────────────────────────────────────────
 // Vault — main app UI (only rendered when authenticated)
 // ─────────────────────────────────────────────────────────
-function Vault({ user }) {
+function Vault({ user, themeMode, onThemeChange }) {
   // ── State ──────────────────────────────────────────────
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -354,16 +388,20 @@ function Vault({ user }) {
 
   // ─────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar user={user} />
+    <div className="min-h-screen bg-gray-50 transition-colors duration-200 dark:bg-slate-950">
+      <Navbar
+        user={user}
+        themeMode={themeMode}
+        onThemeChange={onThemeChange}
+      />
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         {/* Page title */}
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight dark:text-slate-50">
             File Vault
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
             Securely store and retrieve your files — uploads go directly to S3
             via presigned URLs.
           </p>
@@ -392,11 +430,11 @@ function Vault({ user }) {
           {/* Toolbar */}
           <div
             className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 sm:px-5 py-4
-                          border-b border-gray-100"
+                          border-b border-gray-100 dark:border-slate-800"
           >
             {/* Search */}
             <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-slate-500" />
               <input
                 type="search"
                 placeholder="Search files…"
@@ -442,7 +480,8 @@ function Vault({ user }) {
             {listError && (
               <div
                 className="flex items-start gap-2 text-sm text-red-700 bg-red-50
-                              border border-red-200 rounded-lg px-4 py-3 mb-4"
+                              border border-red-200 rounded-lg px-4 py-3 mb-4
+                              dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
               >
                 <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                 <div>
@@ -462,7 +501,7 @@ function Vault({ user }) {
               <LoadingState />
             ) : displayFiles.length === 0 ? (
               q ? (
-                <div className="py-10 text-center text-sm text-gray-500">
+                <div className="py-10 text-center text-sm text-gray-500 dark:text-slate-400">
                   No files match "<strong>{searchQuery}</strong>"
                 </div>
               ) : (
@@ -503,7 +542,7 @@ function Vault({ user }) {
 
             {/* Result count when filtering */}
             {!loading && q && displayFiles.length > 0 && (
-              <p className="mt-4 text-xs text-gray-400 text-right">
+              <p className="mt-4 text-xs text-gray-400 text-right dark:text-slate-500">
                 {displayFiles.length} of {files.length} files
               </p>
             )}

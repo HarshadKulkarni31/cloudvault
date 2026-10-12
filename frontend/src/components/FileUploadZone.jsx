@@ -75,28 +75,29 @@ export default function FileUploadZone({ onUpload, uploading }) {
         aria-label="Upload file — click or drag and drop"
         className={[
           'w-full border-2 border-dashed rounded-xl p-8 text-center transition-colors duration-150',
-          'focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2',
+          'focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-950',
           dragging
-            ? 'border-brand-500 bg-brand-50'
-            : 'border-gray-300 bg-white hover:border-brand-400 hover:bg-gray-50',
+            ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+            : 'border-gray-300 bg-white hover:border-brand-400 hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-brand-500 dark:hover:bg-slate-800',
           uploading ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer',
         ].join(' ')}
       >
         <UploadCloud
-          className={`mx-auto w-10 h-10 mb-3 ${dragging ? 'text-brand-500' : 'text-gray-400'}`}
+          className={`mx-auto w-10 h-10 mb-3 ${dragging ? 'text-brand-500' : 'text-gray-400 dark:text-slate-500'}`}
           strokeWidth={1.5}
         />
-        <p className="text-sm font-medium text-gray-700">
+        <p className="text-sm font-medium text-gray-700 dark:text-slate-200">
           {uploading ? 'Uploading…' : 'Drop a file here, or click to select'}
         </p>
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
           PDF, Word, Excel, PowerPoint, images, ZIP · Max {MAX_FILE_SIZE_MB} MB
         </p>
       </button>
 
       {clientError && (
         <div className="flex items-start gap-2 text-sm text-red-700 bg-red-50
-                        border border-red-200 rounded-lg px-3 py-2 animate-fade-in">
+                        border border-red-200 rounded-lg px-3 py-2 animate-fade-in
+                        dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
           <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
           <span>{clientError}</span>
         </div>

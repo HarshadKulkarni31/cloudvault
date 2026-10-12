@@ -20,17 +20,17 @@ export default function StorageSummary({ fileCount, totalSize }) {
 
   return (
     <div className="card px-5 py-4 space-y-3">
-      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider dark:text-slate-400">
         Storage Usage
       </h3>
 
       {/* Storage bar */}
       <div className="space-y-1">
-        <div className="flex justify-between text-xs text-gray-600">
+        <div className="flex justify-between text-xs text-gray-600 dark:text-slate-300">
           <span>{formatFileSize(totalSize)} used</span>
-          <span className="text-gray-400">{formatFileSize(MAX_STORAGE_BYTES)} limit</span>
+          <span className="text-gray-400 dark:text-slate-500">{formatFileSize(MAX_STORAGE_BYTES)} limit</span>
         </div>
-        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div className="h-2 bg-gray-100 rounded-full overflow-hidden dark:bg-slate-800">
           <div
             className={`h-full rounded-full transition-all duration-300 ${barColor(storagePct)}`}
             style={{ width: `${storagePct}%` }}
@@ -45,11 +45,11 @@ export default function StorageSummary({ fileCount, totalSize }) {
 
       {/* Object count bar */}
       <div className="space-y-1">
-        <div className="flex justify-between text-xs text-gray-600">
+        <div className="flex justify-between text-xs text-gray-600 dark:text-slate-300">
           <span>{fileCount} {fileCount === 1 ? 'file' : 'files'}</span>
-          <span className="text-gray-400">{MAX_OBJECTS} limit</span>
+          <span className="text-gray-400 dark:text-slate-500">{MAX_OBJECTS} limit</span>
         </div>
-        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden dark:bg-slate-800">
           <div
             className={`h-full rounded-full transition-all duration-300 ${barColor(objectPct)}`}
             style={{ width: `${objectPct}%` }}

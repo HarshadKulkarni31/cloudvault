@@ -26,16 +26,16 @@ export default function ConfirmDeleteModal({ file, onConfirm, onCancel, deleting
       <div className="card w-full max-w-sm p-6 space-y-4 animate-slide-up shadow-xl">
         {/* Icon + title */}
         <div className="flex items-start gap-3">
-          <div className="p-2 bg-red-100 rounded-lg flex-shrink-0">
-            <AlertTriangle className="w-5 h-5 text-red-600" />
+          <div className="p-2 bg-red-100 rounded-lg flex-shrink-0 dark:bg-red-950/60">
+            <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
           </div>
           <div>
-            <h2 id="delete-modal-title" className="font-semibold text-gray-900">
+            <h2 id="delete-modal-title" className="font-semibold text-gray-900 dark:text-slate-50">
               Delete file
             </h2>
-            <p className="mt-1 text-sm text-gray-600">
+            <p className="mt-1 text-sm text-gray-600 dark:text-slate-300">
               Are you sure you want to permanently delete{' '}
-              <span className="font-medium text-gray-800 break-all">"{file.name}"</span>?
+              <span className="font-medium text-gray-800 break-all dark:text-slate-100">"{file.name}"</span>?
               This action cannot be undone.
             </p>
           </div>

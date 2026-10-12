@@ -138,18 +138,18 @@ export default function FilePreviewModal({ preview, onClose }) {
         }
       }}
     >
-      <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+      <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-slate-900">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-slate-800">
           <div className="min-w-0">
             <h2
-              className="truncate font-semibold text-gray-900"
+              className="truncate font-semibold text-gray-900 dark:text-slate-50"
               title={file.name}
             >
               {file.name}
             </h2>
 
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-500 dark:text-slate-400">
               {file.contentType || "File preview"}
             </p>
           </div>
@@ -176,7 +176,7 @@ export default function FilePreviewModal({ preview, onClose }) {
         </div>
 
         {/* Preview area */}
-        <div className="min-h-[300px] overflow-auto bg-gray-50 p-4">
+        <div className="min-h-[300px] overflow-auto bg-gray-50 p-4 dark:bg-slate-950">
           {previewType === "image" && (
             <div className="flex min-h-[300px] items-center justify-center">
               <img
@@ -191,7 +191,7 @@ export default function FilePreviewModal({ preview, onClose }) {
             <iframe
               src={url}
               title={`Preview of ${file.name}`}
-              className="h-[70vh] w-full rounded-lg border border-gray-200 bg-white"
+              className="h-[70vh] w-full rounded-lg border border-gray-200 bg-white dark:border-slate-800"
             />
           )}
 
@@ -209,8 +209,8 @@ export default function FilePreviewModal({ preview, onClose }) {
 
           {previewType === "audio" && (
             <div className="flex min-h-[300px] flex-col items-center justify-center gap-6">
-              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gray-100">
-                <File className="h-9 w-9 text-gray-500" />
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gray-100 dark:bg-slate-800">
+                <File className="h-9 w-9 text-gray-500 dark:text-slate-400" />
               </div>
 
               <audio src={url} controls className="w-full max-w-xl" />
@@ -220,14 +220,14 @@ export default function FilePreviewModal({ preview, onClose }) {
           {previewType === "text" && (
             <>
               {textLoading ? (
-                <div className="flex min-h-[300px] items-center justify-center gap-2 text-sm text-gray-500">
+                <div className="flex min-h-[300px] items-center justify-center gap-2 text-sm text-gray-500 dark:text-slate-400">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Loading file...
                 </div>
               ) : error ? (
                 <PreviewError message={error} />
               ) : (
-                <pre className="min-h-[300px] whitespace-pre-wrap break-words rounded-lg bg-white p-4 font-mono text-sm text-gray-800 shadow-sm">
+                <pre className="min-h-[300px] whitespace-pre-wrap break-words rounded-lg bg-white p-4 font-mono text-sm text-gray-800 shadow-sm dark:bg-slate-900 dark:text-slate-200 dark:shadow-none">
                   {textContent}
                 </pre>
               )}
@@ -236,13 +236,13 @@ export default function FilePreviewModal({ preview, onClose }) {
 
           {previewType === "unsupported" && (
             <div className="flex min-h-[300px] flex-col items-center justify-center gap-3 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-100">
-                <FileText className="h-8 w-8 text-gray-500" />
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 dark:bg-slate-800">
+                <FileText className="h-8 w-8 text-gray-500 dark:text-slate-400" />
               </div>
 
               <div>
-                <p className="font-medium text-gray-800">Preview unavailable</p>
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="font-medium text-gray-800 dark:text-slate-200">Preview unavailable</p>
+                <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
                   This file type cannot be previewed in the browser.
                 </p>
               </div>
@@ -264,9 +264,9 @@ function PreviewError({ message }) {
     <div className="flex min-h-[300px] flex-col items-center justify-center text-center">
       <AlertCircle className="h-8 w-8 text-red-500" />
 
-      <p className="mt-3 font-medium text-gray-800">Preview failed</p>
+      <p className="mt-3 font-medium text-gray-800 dark:text-slate-200">Preview failed</p>
 
-      <p className="mt-1 text-sm text-gray-500">{message}</p>
+      <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">{message}</p>
     </div>
   );
 }

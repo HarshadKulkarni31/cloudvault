@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Cloud, ShieldCheck, Loader2 } from 'lucide-react';
 import { login } from '../services/auth.js';
+import ThemeToggle from './ThemeToggle.jsx';
 
 /**
  * LoginPage — shown to unauthenticated users.
  * A single "Sign in with Google" button that redirects to Cognito Hosted UI.
  */
-export default function LoginPage() {
+export default function LoginPage({ themeMode, onThemeChange }) {
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState(null);
 
@@ -22,17 +23,21 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex flex-col items-center justify-center px-4">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex flex-col items-center justify-center px-4 transition-colors duration-200 dark:from-slate-950 dark:to-slate-900">
+      <div className="absolute right-4 top-4">
+        <ThemeToggle themeMode={themeMode} onThemeChange={onThemeChange} />
+      </div>
+
       {/* Card */}
-      <div className="w-full max-w-sm bg-white rounded-2xl border border-gray-200 shadow-lg p-8 space-y-6">
+      <div className="w-full max-w-sm bg-white rounded-2xl border border-gray-200 shadow-lg p-8 space-y-6 dark:bg-slate-900 dark:border-slate-800 dark:shadow-none">
 
         {/* Branding */}
         <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-brand-600 shadow-md">
             <Cloud className="w-7 h-7 text-white" strokeWidth={2} />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">CloudVault</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight dark:text-slate-50">CloudVault</h1>
+          <p className="text-sm text-gray-500 dark:text-slate-400">
             Your private, serverless file vault
           </p>
         </div>
@@ -45,10 +50,12 @@ export default function LoginPage() {
                      border border-gray-300 bg-white text-gray-700 font-medium text-sm
                      shadow-sm hover:bg-gray-50 hover:border-gray-400
                      active:bg-gray-100 transition-colors duration-150
+                     dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100
+                     dark:hover:bg-slate-800 dark:hover:border-slate-600 dark:active:bg-slate-900
                      disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {loading ? (
-            <Loader2 className="w-5 h-5 animate-spin text-gray-500" />
+            <Loader2 className="w-5 h-5 animate-spin text-gray-500 dark:text-slate-400" />
           ) : (
             /* Google G logo SVG */
             <svg className="w-5 h-5" viewBox="0 0 24 24" aria-hidden="true">
@@ -74,13 +81,13 @@ export default function LoginPage() {
         </button>
 
         {error && (
-          <p className="text-xs text-red-600 text-center bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          <p className="text-xs text-red-600 text-center bg-red-50 border border-red-200 rounded-lg px-3 py-2 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
             {error}
           </p>
         )}
 
         {/* Trust signals */}
-        <div className="border-t border-gray-100 pt-5 space-y-2">
+        <div className="border-t border-gray-100 pt-5 space-y-2 dark:border-slate-800">
           {[
             'Files stored privately in your own S3 vault',
             'No passwords — Google handles authentication',
@@ -88,13 +95,13 @@ export default function LoginPage() {
           ].map((text) => (
             <div key={text} className="flex items-start gap-2">
               <ShieldCheck className="w-4 h-4 text-brand-500 mt-0.5 flex-shrink-0" />
-              <span className="text-xs text-gray-500">{text}</span>
+              <span className="text-xs text-gray-500 dark:text-slate-400">{text}</span>
             </div>
           ))}
         </div>
       </div>
 
-      <p className="mt-6 text-xs text-gray-400">
+      <p className="mt-6 text-xs text-gray-400 dark:text-slate-500">
         Powered by AWS S3, Lambda & Cognito
       </p>
     </div>

@@ -33,7 +33,7 @@ export default function CallbackPage({ onSuccess }) {
   }, [onSuccess]);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 transition-colors duration-200 dark:bg-slate-950">
       <div className="text-center space-y-4">
         <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-brand-600 shadow-md">
           <Cloud className="w-7 h-7 text-white" strokeWidth={2} />
@@ -41,12 +41,12 @@ export default function CallbackPage({ onSuccess }) {
 
         {error ? (
           <div className="max-w-sm space-y-3">
-            <div className="flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+            <div className="flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
               <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
 
               <div className="text-left">
                 <p className="font-medium">Sign-in failed</p>
-                <p className="text-xs mt-0.5 text-red-600">{error}</p>
+                <p className="text-xs mt-0.5 text-red-600 dark:text-red-300">{error}</p>
               </div>
             </div>
 
@@ -59,9 +59,9 @@ export default function CallbackPage({ onSuccess }) {
           </div>
         ) : (
           <div>
-            <p className="text-sm font-medium text-gray-700">Signing you in…</p>
+            <p className="text-sm font-medium text-gray-700 dark:text-slate-200">Signing you in…</p>
 
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs text-gray-400 mt-1 dark:text-slate-500">
               Completing secure authentication
             </p>
           </div>

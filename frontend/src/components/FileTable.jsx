@@ -51,28 +51,28 @@ export default function FileTable({
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-gray-200 text-left text-xs text-gray-500 font-medium uppercase tracking-wide">
+          <tr className="border-b border-gray-200 text-left text-xs text-gray-500 font-medium uppercase tracking-wide dark:border-slate-800 dark:text-slate-400">
             <th className="pb-3 pl-4 pr-2">Name</th>
             <th className="pb-3 px-2 text-right">Size</th>
             <th className="pb-3 px-2">Uploaded</th>
             <th className="pb-3 px-4 text-right">Actions</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
           {files.map((file) => (
             <tr
               key={file.key}
-              className="group hover:bg-gray-50 transition-colors"
+              className="group hover:bg-gray-50 transition-colors dark:hover:bg-slate-800/70"
             >
               {/* Name */}
               <td className="py-3 pl-4 pr-2">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <FileIcon
                     name={file.name}
-                    className="w-4 h-4 text-gray-400 flex-shrink-0"
+                    className="w-4 h-4 text-gray-400 flex-shrink-0 dark:text-slate-500"
                   />
                   <span
-                    className="truncate font-medium text-gray-800 max-w-xs"
+                    className="truncate font-medium text-gray-800 max-w-xs dark:text-slate-200"
                     title={file.name}
                   >
                     {file.name}
@@ -81,12 +81,12 @@ export default function FileTable({
               </td>
 
               {/* Size */}
-              <td className="py-3 px-2 text-right text-gray-500 tabular-nums whitespace-nowrap">
+              <td className="py-3 px-2 text-right text-gray-500 tabular-nums whitespace-nowrap dark:text-slate-400">
                 {formatFileSize(file.size)}
               </td>
 
               {/* Date */}
-              <td className="py-3 px-2 text-gray-500 whitespace-nowrap">
+              <td className="py-3 px-2 text-gray-500 whitespace-nowrap dark:text-slate-400">
                 <time
                   dateTime={file.lastModified}
                   title={formatDateFull(file.lastModified)}
@@ -103,7 +103,7 @@ export default function FileTable({
                     aria-label={`Preview ${file.name}`}
                     title="Preview"
                     className="btn-ghost rounded-md px-2 py-1.5 text-gray-600
-                 hover:text-brand-600 disabled:opacity-40"
+                 hover:text-brand-600 disabled:opacity-40 dark:text-slate-300 dark:hover:text-brand-400"
                   >
                     {previewing === file.key ? (
                       <span className="text-xs">…</span>
@@ -118,7 +118,7 @@ export default function FileTable({
                     aria-label={`Download ${file.name}`}
                     title="Download"
                     className="btn-ghost rounded-md px-2 py-1.5 text-gray-600
-                 hover:text-brand-600 disabled:opacity-40"
+                 hover:text-brand-600 disabled:opacity-40 dark:text-slate-300 dark:hover:text-brand-400"
                   >
                     {downloading === file.key ? (
                       <span className="text-xs">…</span>
@@ -133,7 +133,7 @@ export default function FileTable({
                     aria-label={`Delete ${file.name}`}
                     title="Delete"
                     className="btn-ghost rounded-md px-2 py-1.5 text-gray-600
-                 hover:text-red-600 disabled:opacity-40"
+                 hover:text-red-600 disabled:opacity-40 dark:text-slate-300 dark:hover:text-red-400"
                   >
                     {deleting === file.key ? (
                       <span className="text-xs">…</span>

@@ -8,6 +8,16 @@
     <link rel="icon" type="image/svg+xml" href="/vault-icon.svg" />
   </head>
   <body class="bg-gray-50">
+    <script>
+      (() => {
+        const mode = localStorage.getItem('cloudvault-theme') || 'system';
+        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.documentElement.classList.toggle(
+          'dark',
+          mode === 'dark' || (mode === 'system' && systemDark),
+        );
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
